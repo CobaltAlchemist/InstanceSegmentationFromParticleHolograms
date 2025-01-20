@@ -4,7 +4,7 @@
       {
         "label": "build docker development",
         "type": "shell",
-        "command": "docker build --target development -t holodino ."
+        "command": "docker build --target development -t holodino:dev ."
       },
       {
         "label": "build docker deployment",

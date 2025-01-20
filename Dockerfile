@@ -27,6 +27,10 @@ RUN pip uninstall -y holodino fakeholo
 
 FROM base AS deployment
 
-COPY . .
+COPY config config
+COPY datasets datasets
+COPY fakeholo fakeholo
+COPY holodino holodino
+COPY pyproject.toml .
 RUN pip install .
 ENTRYPOINT ["python", "-m"]
