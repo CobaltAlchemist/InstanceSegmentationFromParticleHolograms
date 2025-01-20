@@ -1,0 +1,79 @@
+MODEL:
+  # BACKBONE:
+  #   FREEZE_AT: 0
+  #   NAME: "build_resnet_backbone"
+  # WEIGHTS: "detectron2://ImageNetPretrained/torchvision/R-50.pkl"
+  # PIXEL_MEAN: [123.675, 116.280, 103.530]
+  # PIXEL_STD: [58.395, 57.120, 57.375]
+  # RESNETS:
+  #   DEPTH: 50
+  #   STEM_TYPE: "basic"  # not used
+  #   STEM_OUT_CHANNELS: 64
+  #   STRIDE_IN_1X1: False
+  #   OUT_FEATURES: ["res2", "res3", "res4", "res5"]
+  #   # NORM: "SyncBN"
+  #   RES5_MULTI_GRID: [1, 1, 1, 1]  # not used
+  BACKBONE:
+    FREEZE_AT: 0
+    NAME: "build_holo_backbone"
+  RESNETS:
+    RES2_OUT_CHANNELS: 64
+    STEM_TYPE: "basic"  # not used
+    STEM_OUT_CHANNELS: 64
+    STRIDE_IN_1X1: False
+    # NORM: "SyncBN"
+    RES5_MULTI_GRID: [1, 1, 1, 1]  # not used
+  MaskDINO:
+    INITIALIZE_BOX_TYPE: mask2box
+    DROPOUT: 0.0
+    NUM_OBJECT_QUERIES: 300
+    CLASS_WEIGHT: 0.1
+    TEST:
+      INSTANCE_ON: true
+      OBJECT_MASK_THRESHOLD: 0.25
+      OVERLAP_THRESHOLD: 0.8
+      SEMANTIC_ON: false
+  META_ARCHITECTURE: MaskDINO
+  SEM_SEG_HEAD:
+    NAME: MaskDINOHead
+    NUM_CLASSES: 1
+    CONVS_DIM: 256
+    DIM_FEEDFORWARD: 2048
+DATASETS:
+  TRAIN: ("fakeholo_hard_autogen_s",)
+  TEST: ("dentalparticles","waterdroplets")
+SOLVER:
+  LR_SCHEDULER_NAME: WarmupCosineLR
+  BACKBONE_MULTIPLIER: 1.0
+  GAMMA: 0.5
+  STEPS:
+  - 30000
+  - 50000
+  - 60000
+  - 70000
+  - 80000
+  - 90000
+  WARMUP_FACTOR: 1.0
+  WARMUP_ITERS: 10
+  WEIGHT_DECAY: 0.05
+  OPTIMIZER: "ADAMW"
+  CLIP_GRADIENTS:
+    ENABLED: True
+    CLIP_TYPE: "full_model"
+    CLIP_VALUE: 0.01
+    NORM_TYPE: 2.0
+  AMP:
+    ENABLED: True
+INPUT:
+  MIN_SCALE: 0.1
+  MAX_SCALE: 2.0
+  FORMAT: "RGB"
+  DATASET_MAPPER_NAME: "holodino_autogen"
+DATALOADER:
+  FILTER_EMPTY_ANNOTATIONS: True
+  NUM_WORKERS: 4
+VERSION: 2
+HOLODINO:
+  RECONSTRUCTION_PROBABILITY: 0.5
+  RECONSTRUCTION_RESOLUTION: 4.0
+  RECONSTRUCTION_WAVELENGTH: 0.65

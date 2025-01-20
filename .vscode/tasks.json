@@ -1,0 +1,89 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "build docker development",
+        "type": "shell",
+        "command": "docker build --target development -t holodino ."
+      },
+      {
+        "label": "build docker deployment",
+        "type": "shell",
+        "command": "docker build --target deployment -t holodino ."
+      },
+      {
+        "label": "test",
+        "type": "shell",
+        "command": "pytest tests/"
+      },
+      {
+        "label": "install",
+        "type": "shell",
+        "command": "pip install -e .[dev]"
+      },
+      {
+        "label": "cuda",
+        "type": "shell",
+        "command": "python -c 'import torch; print(torch.cuda.is_available())'"
+      },
+      {
+        "label": "profile",
+        "type": "shell",
+        "command": "python -m holodino --genserver --profile_only --config ${input:configFile} --num-gpus 1",
+      },
+      {
+        "label": "eval",
+        "type": "shell",
+        "command": "python -m holodino --eval_only --config models/${input:testModel}/config.yaml --num-gpus 1 DATASETS.TEST \"('${input:testDataset}',)\" MODEL.WEIGHTS \"models/${input:testModel}/model_final.pth\" OUTPUT_DIR \"eval/${input:testModel}/${input:testDataset}\"",
+      },
+      {
+        "label": "train",
+        "type": "shell",
+        "command": "python -m holodino --genserver --config ${input:configFile} --num-gpus 1",
+      },
+      {
+        "label": "generate",
+        "type": "shell",
+        "command": "python -m fakeholo generate -n 10 --config ${input:datasetConfig} -o ./samples",
+      }
+    ],
+    "inputs": [
+      {
+        "id": "configFile",
+        "type": "pickString",
+        "description": "Which configuration file are we using?",
+        "options": [
+          "config/holodino-large.yaml",
+          "config/holodino-small.yaml",
+        ]
+      },
+      {
+        "id": "datasetConfig",
+        "type": "pickString",
+        "description": "Which dataset configuration file are we using?",
+        "options": [
+          "datasets/fakeholo_hard/cfg.json"
+        ]
+      },
+      {
+        "id": "testDataset",
+        "type": "pickString",
+        "description": "Select a dataset to test",
+        "options": [
+          "waterdroplets",
+          "dentalparticles"
+        ]
+      },
+      {
+        "id": "testModel",
+        "type": "pickString",
+        "description": "Select a model to test",
+        "options": [
+          "holodino",
+          "waterdroplets",
+          "dentalparticles"
+        ]
+      }
+    ]
+  }
+  

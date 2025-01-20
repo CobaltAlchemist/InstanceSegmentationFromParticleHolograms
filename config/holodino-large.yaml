@@ -1,0 +1,27 @@
+_BASE_: base-holodino.yaml
+MODEL:
+  RESNETS:
+    DEPTH: 34
+    KERNEL_SIZE: 9
+    OUT_FEATURES: ["res3", "res4", "res5"]
+  MaskDINO:
+    DEC_LAYERS: 9
+  SEM_SEG_HEAD:
+    TRANSFORMER_ENC_LAYERS: 6
+    IN_FEATURES:
+    - res3
+    - res4
+    - res5
+    DEFORMABLE_TRANSFORMER_ENCODER_IN_FEATURES:
+    - res3
+    - res4
+    - res5
+SOLVER:
+  IMS_PER_BATCH: 32
+  BASE_LR: 0.0001
+  MAX_ITER: 100000
+  CHECKPOINT_PERIOD: 1000
+INPUT:
+  IMAGE_SIZE: 1024
+TEST:
+  EVAL_PERIOD: 500
