@@ -18,7 +18,9 @@ dependencies = [
     "pandas",
     "more_itertools",
     "typer",
-    "backoff"
+    "backoff",
+    "scipy",
+    "seaborn"
 ]
 
 [project.optional-dependencies]

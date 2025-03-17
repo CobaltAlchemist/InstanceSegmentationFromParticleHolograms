@@ -2,6 +2,8 @@
 
 This project, `InstanceSegmentationFromParticleHolograms`, provides tools for instance segmentation of particle holograms using deep learning models. It includes functionalities for generating synthetic hologram samples, training models, and running inference.
 
+You can see the article [here](https://iopscience.iop.org/article/10.1088/1361-6501/adb50f) and preprint [here](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4960633)
+
 ## Installation
 
 To set up the environment and install dependencies, follow these steps:

@@ -1,16 +1,16 @@
 from ast import literal_eval
+import copy
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Tuple
 import cv2
-import copy
+import scipy
 
 import numpy as np
 from .data import BoundingBox, HoloImage, HoloSample, BoundingBoxFormat
 
 from .synthesis import Synthesizer, Laser, Medium, HologramMask, TorchSynthesizer
 from .utils import RandomComplex, RandomRange
-
 
 @dataclass
 class GeneratedHologram:
@@ -31,11 +31,48 @@ class ContourGenerator:
 
 
 class BlobContourGenerator(ContourGenerator):
-    def __init__(self, threshold=0.95, kernel_size=8, min_area=0, max_count=None):
+    def __init__(self, threshold=0.95, kernel_size=8, min_area=0, max_count=None, circularity_threshold=None, pinch_threshold=None, solidity_threshold=None):
         self.threshold = threshold
         self.kernel_size = kernel_size
         self.min_area = min_area
         self.max_count = max_count
+        self.pinch_threshold = pinch_threshold
+        self.circularity_threshold = circularity_threshold
+        self.solidity_threshold = solidity_threshold
+
+    def _curvature(self, cv2_contour):
+        dx = np.gradient(cv2_contour[:, 0, 0])
+        dy = np.gradient(cv2_contour[:, 0, 1])
+        ddx = np.gradient(dx)
+        ddy = np.gradient(dy)
+        return (dx * ddy - dy * ddx) / (dx ** 2 + dy ** 2) ** 1.5
+
+    def _is_pinched(self, cv2_contour):
+        try:
+            hull = cv2.convexHull(cv2_contour, returnPoints=False)
+            defects = cv2.convexityDefects(cv2_contour, hull)
+            area = cv2.contourArea(cv2_contour)
+            if defects is None:
+                return False
+            farthest_points = [defect[0][2] for defect in defects]
+            pairwise_distances = scipy.spatial.distance.pdist(
+                cv2_contour[farthest_points, 0, :])
+            if any(pairwise_distances < (self.pinch_threshold * np.sqrt(area))):
+                return True
+            return False
+        except Exception as e:
+            return True
+
+    def _circularity(self, cv2_contour):
+        area = cv2.contourArea(cv2_contour)
+        perimeter = cv2.arcLength(cv2_contour, True)
+        return 4 * np.pi * area / perimeter ** 2
+
+    def _solidity(self, cv2_contour):
+        area = cv2.contourArea(cv2_contour)
+        hull = cv2.convexHull(cv2_contour)
+        hull_area = cv2.contourArea(hull)
+        return area / hull_area
 
     def generate(self,
                  output_size: Tuple[int, int],
@@ -55,6 +92,15 @@ class BlobContourGenerator(ContourGenerator):
         if self.min_area:
             contours = tuple(
                 filter(lambda c: cv2.contourArea(c) >= self.min_area, contours))
+        if self.pinch_threshold:
+            contours = tuple(
+                filter(lambda c: not self._is_pinched(c), contours))
+        if self.solidity_threshold:
+            contours = tuple(
+                filter(lambda c: self._solidity(c) >= self.solidity_threshold, contours))
+        if self.circularity_threshold:
+            contours = tuple(
+                filter(lambda c: self._circularity(c) >= self.circularity_threshold, contours))
         if self.max_count:
             indices = rng.choice(len(contours), min(
                 len(contours), self.max_count), replace=False)
@@ -78,7 +124,8 @@ class SampleGenerator:
             ior_rng: RandomRange,
             default_size: Tuple[int, int] = None,
             default_seed: int = -1,
-            far_field_thresh: float = None):
+            far_field_thresh: float = None,
+            random_max_depth: bool = True):
         self.synthesizer = synthesizer
         self.medium = medium
         self.laser = laser
@@ -88,6 +135,7 @@ class SampleGenerator:
         self.default_size = default_size
         self.default_seed = default_seed
         self.far_field_thresh = far_field_thresh
+        self.random_max_depth = random_max_depth
 
     @staticmethod
     def cv2toholo_contour(cv2contour):
@@ -113,7 +161,6 @@ class SampleGenerator:
 
     @classmethod
     def from_dict(cls, json: Dict[str, Any]):
-        json = copy.deepcopy(json)
         if not 'output_size' in json:
             json['output_size'] = None
         if json.get('seed', -1) == -1:
@@ -144,7 +191,8 @@ class SampleGenerator:
             ior_rng=RandomComplex(**property_generation['ior']),
             default_size=tuple(json['synthesis']['output_size']),
             default_seed=json['seed'],
-            far_field_thresh=property_generation['far_field_thresh'])
+            far_field_thresh=property_generation['far_field_thresh'],
+            random_max_depth=property_generation.get('random_max', True))
 
     def to_dict(self):
         synth = self.synthesizer.to_dict()
@@ -170,12 +218,15 @@ class SampleGenerator:
             seed = np.random.randint(0, np.iinfo(np.int32).max)
         rng = np.random.default_rng(seed=seed)
         contours = self.contour_generator.generate(output_size, rng)
+        assert len(
+            contours) > 0, "No contours generated, restrictions may be too high"
         masks = []
         depths = []
         keeps = []
         mask = np.zeros(output_size, dtype=np.uint8)
+        random_max = self.depth_rng(rng)
         random_max_depth_rng = RandomRange(
-            self.depth_rng.min, self.depth_rng(rng), self.depth_rng.dist)
+            self.depth_rng.min, random_max, self.depth_rng.dist) if self.random_max_depth else self.depth_rng
         for contour in contours:
             mask[...] = 0
             mask = cv2.drawContours(mask, [contour], -1, (255, 255, 255), -1)
@@ -198,12 +249,10 @@ class SampleGenerator:
         return HoloSample(img, bbs)
 
     def generate_image(self, holo: GeneratedHologram, ih, iw) -> HoloImage:
-        img = HoloImage(
+        img = HoloImage.from_array(
+            holo.image,
             file=f"Generated_{holo.seed}.png",
-            as_arr=holo.image,
-            index=0,
-            height=ih,
-            width=iw
+            index=0
         )
         return img
 

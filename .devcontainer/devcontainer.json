@@ -17,7 +17,9 @@
 				"ms-python.pylint",
 				"ryu1kn.partial-diff",
 				"ms-python.vscode-pylance",
-				"spmeesseman.vscode-taskexplorer"
+				"spmeesseman.vscode-taskexplorer",
+				"ms-python.vscode-python-envs",
+				"ms-toolsai.jupyter"
 			]
 		}
 	},

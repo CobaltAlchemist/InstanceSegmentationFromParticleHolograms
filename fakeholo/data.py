@@ -1,11 +1,12 @@
 from dataclasses import dataclass
 from enum import Enum
-from functools import lru_cache
+from functools import cached_property, lru_cache
 from typing import List, Tuple, Union
 import cv2
 import numpy as np
 from .utils import LazyImageArray
 from scipy.optimize import linear_sum_assignment
+from PIL import Image
 
 
 def intersection_over_union(box_a, box_b):
@@ -70,10 +71,10 @@ def intersection_over_union_matrix(preds, labels):
 @dataclass
 class HoloImage:
     file: str
-    as_arr: np.ndarray
     index: int = 0
     height: int = 0
     width: int = 0
+    _array = None
 
     def __array__(self, dtype=None):
         return self.as_arr
@@ -89,18 +90,41 @@ class HoloImage:
                         w / max_size, 1)
             return self.resize(dsize=tuple(map(int, (w // scale, h // scale))))
         img = cv2.resize(self.as_arr, dsize, interpolation=cv2.INTER_AREA)
-        ret = HoloImage(self.file, img, self.index, dsize[1], dsize[0])
+        ret = HoloImage(self.file, self.index, dsize[1], dsize[0], img)
         return ret
+    
+    @property
+    def as_arr(self):
+        if not self._array is None:
+            return self._array
+        pil_img = Image.open(self.file)
+        if 0 != self.index:
+            assert '.tif' in self.file, "File has index, but is not a tiff"
+            pil_img.seek(self.index)
+        if (self.height, self.width) != pil_img.size and self.height > 0 and self.width > 0:
+            pil_img = pil_img.resize((self.height, self.width))
+        self._array = np.asarray(pil_img.convert('L'))
+        return self._array
 
     @classmethod
     def from_file(cls, file: str, index: int = 0, height: int = 0, width: int = 0):
         return cls(
             file=file,
-            as_arr=LazyImageArray(file, (height, width), index=index),
             index=index,
             height=height,
             width=width
         )
+    
+    @classmethod
+    def from_array(cls, arr: np.ndarray, **kwargs):
+        height, width = arr.shape[-2:]
+        inst = cls(
+            height=height,
+            width=width,
+            **kwargs
+        )
+        inst._array = arr
+        return inst
 
 
 class BoundingBoxFormat(Enum):
@@ -117,6 +141,7 @@ class BoundingBox:
     h: Union[float, int] = 0
     z: float = 0
     diameter: float = 0
+    score: float = 0
     contour: np.ndarray = None
     format: BoundingBoxFormat = BoundingBoxFormat.RELATIVE
 
@@ -269,12 +294,13 @@ class BoundingBox:
             self.w = int(x2 - x1)
             self.h = int(y2 - y1)
 
-    def draw(self, img: Union[np.ndarray, HoloImage]):
+    def draw(self, img: Union[np.ndarray, HoloImage], contours=True, boxes=True):
         img = np.array(img)
-        if self.has_contour():
-            cv2.drawContours(img, [self.getcv2contour(img)], 0, (0, 255, 0), 2)
-        x1, y1, x2, y2 = self.to_pixelspace(img).minmax()
-        cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        if contours and self.has_contour():
+            img = cv2.drawContours(img, [self.getcv2contour(img)], 0, (0, 255, 0), 2)
+        if boxes:
+            x1, y1, x2, y2 = self.to_pixelspace(img).minmax()
+            img = cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
         return img
     
     def iou(self, other):
